@@ -1,6 +1,14 @@
-let proc leaf(i) =
-
-in
-let proc bft(t) =
-in
-in 2025
+ let proc leaf (i) = tree := {left := {}, v := i, right := {}} in (* leaf tree *)
+ let makeLtree (i, t) = tree := {left := t, v := i, right := {}} in (* tree with only left subtree *)
+ let makeRtree (i, t) = tree := {left := {}, v := i, right := t} in (* tree with only right subtree *)
+ let makeTree (i, lt, rt) = tree := {left := lt, v := i, right := rt} in (* tree with both subtrees *)
+ let isLeaf (t) = if t.left = {} && t.right = {} then true else false (* see if leaf tree *)
+ let isLtree (t) = if ((not t.left = {}) && t.right = {}) then true else false (* see if tree with only left subtree *)
+ let isRtree (t) = if ((not t.right = {}) && t.left = {}) then true else false (* see if tree with only right subtree *)
+ let isLRtree (t) = if ((not t.left = {}) && (not t.right = {})) then true else false (* see if tree with both subtrees *)
+ let rTree (t) = t.right (* right subtree *)
+ let lTree (t) = t.left (* left subtree *)
+ let nodeVal (t) = t.v (* node value *)
+ let dft (t) = () (* print node values in depth-first order *)
+ let bft (t) = () (* print node values in breath-first order *)
+(* in 2025 *)

@@ -1,3 +1,4 @@
+ type tree = { left : tree ; v : int ; right : tree} in
  let proc leaf (i) = {left := {}, v := i, right := {}} in (* leaf tree *)
  let makeLtree (i, t) = {left := t, v := i, right := {}} in (* tree with only left subtree *)
  let makeRtree (i, t) = {left := {}, v := i, right := t} in (* tree with only right subtree *)

@@ -1,5 +1,11 @@
 type require = id * cond list
-and cond = Items of gift list | Same of id | Common of cond * cond | Except of cond * cond
+
+and cond =
+  | Items of gift list
+  | Same of id
+  | Common of cond * cond
+  | Except of cond * cond
+
 and gift = int
 and id = A | B | C | D | E
 
@@ -87,29 +93,35 @@ let create_dependency_graph reqs =
 let has_cycle graph =
   let visited = Hashtbl.create (Hashtbl.length graph) in
   let rec_detect = Hashtbl.create (Hashtbl.length graph) in
+  let has_cycle = ref false in
   let rec dfs id =
-    if Hashtbl.mem rec_detect id then true
-    else if Hashtbl.mem visited id then false
-    else (
+    if Hashtbl.mem rec_detect id then has_cycle := true
+    else if not (Hashtbl.mem visited id) then (
       Hashtbl.add visited id ();
       Hashtbl.add rec_detect id ();
-      let has_cycle =
-        List.exists
-          (fun neighbor ->
-            if Hashtbl.mem rec_detect neighbor then true else dfs neighbor)
-          (Hashtbl.find graph id)
-      in
-      Hashtbl.remove rec_detect id;
-      has_cycle)
+      List.iter dfs (Hashtbl.find graph id);
+      Hashtbl.remove rec_detect id)
   in
-  List.exists dfs (Hashtbl.fold (fun k _ acc -> k :: acc) graph [])
+  List.iter dfs (Hashtbl.fold (fun k _ acc -> k :: acc) graph []);
+  !has_cycle
 
-let topological_sort graph =
+let can_satisfy_with_empty reqs =
+  let rec check_cond cond =
+    match cond with
+    | Items gifts -> gifts = []
+    | Same _ -> true
+    | Common (c1, c2) -> check_cond c1 && check_cond c2
+    | Except (c1, c2) -> true
+  in
+  List.for_all (fun (_, conds) -> List.for_all check_cond conds) reqs
+
+let topological_sort graph reqs =
   let visited = Hashtbl.create (Hashtbl.length graph) in
   let temp = Hashtbl.create (Hashtbl.length graph) in
   let order = ref [] in
+  let has_cycle = ref false in
   let rec visit id =
-    if Hashtbl.mem temp id then raise No_minimum
+    if Hashtbl.mem temp id then has_cycle := true
     else if not (Hashtbl.mem visited id) then (
       Hashtbl.add temp id ();
       List.iter visit (Hashtbl.find graph id);
@@ -118,7 +130,7 @@ let topological_sort graph =
       order := id :: !order)
   in
   List.iter visit (Hashtbl.fold (fun k _ acc -> k :: acc) graph []);
-  !order
+  if !has_cycle then [] else !order
 
 let rec evaluate_cond id_map cond =
   match cond with
@@ -138,8 +150,11 @@ let rec evaluate_cond id_map cond =
 
 let shoppingList reqs =
   let dependency_graph = create_dependency_graph reqs in
-  if has_cycle dependency_graph then raise No_minimum;
-  let sorted_ids = topological_sort dependency_graph in
+  let sorted_ids =
+    let ids = topological_sort dependency_graph reqs in
+    if ids = [] then Hashtbl.fold (fun k _ acc -> k :: acc) dependency_graph []
+    else ids
+  in
   let id_map = Hashtbl.create (List.length reqs) in
 
   List.iter (fun id -> Hashtbl.add id_map id []) sorted_ids;
@@ -160,7 +175,8 @@ let shoppingList reqs =
     (id, gifts)
   in
 
-  let rec process_until_stable () =
+  let rec process_until_stable iterations =
+    if iterations > 100 then raise No_minimum;
     let changed = ref false in
     let new_results = List.map process_id sorted_ids in
     List.iter2
@@ -176,26 +192,27 @@ let shoppingList reqs =
           changed := true;
           Hashtbl.replace id_map id new_gifts))
       sorted_ids (List.map snd new_results);
-    if !changed then process_until_stable ()
+    if !changed then process_until_stable (iterations + 1)
   in
 
-  process_until_stable ();
+  try
+    process_until_stable 0;
 
-  List.sort
-    (fun (id1, _) (id2, _) ->
-      match (id1, id2) with
-      | A, A -> 0
-      | A, _ -> -1
-      | _, A -> 1
-      | B, B -> 0
-      | B, _ -> -1
-      | _, B -> 1
-      | C, C -> 0
-      | C, _ -> -1
-      | _, C -> 1
-      | D, D -> 0
-      | D, _ -> -1
-      | _, D -> 1
-      | E, E -> 0)
-    (List.map (fun id -> (id, Hashtbl.find id_map id)) sorted_ids)
-
+    List.sort
+      (fun (id1, _) (id2, _) ->
+        match (id1, id2) with
+        | A, A -> 0
+        | A, _ -> -1
+        | _, A -> 1
+        | B, B -> 0
+        | B, _ -> -1
+        | _, B -> 1
+        | C, C -> 0
+        | C, _ -> -1
+        | _, C -> 1
+        | D, D -> 0
+        | D, _ -> -1
+        | _, D -> 1
+        | E, E -> 0)
+      (List.map (fun id -> (id, Hashtbl.find id_map id)) sorted_ids)
+  with _ -> raise No_minimum

@@ -226,7 +226,141 @@ module K : KMINUS = struct
         let v, mem' = eval mem env e in
         let l = lookup_env_loc env x in
         (v, Mem.store mem' l v)
-    | _ -> failwith "Unimplemented" (* TODO : Implement rest of the cases *)
+    | LETF (f, id_list, e1, e2) ->
+        let rec_env = ref env in
+        let proc = Proc (id_list, e1, !rec_env) in
+        let env' = Env.bind env f proc in
+        rec_env := env';
+        eval mem env' e2
+    | CALLV (f, e_list) ->
+        let id_list, exp, env' =
+          try
+            match Env.lookup env f with
+            | Addr _ -> raise (Error "TypeError : not proc")
+            | Proc (id_list, exp, env) as p ->
+                let env' = Env.bind env f p in
+                (id_list, exp, env')
+          with Env.Not_bound -> raise (Error "Unbound")
+        in
+        if List.length id_list <> List.length e_list then
+          raise (Error "InvalidArg");
+        let v_list, mem' =
+          List.fold_left
+            (fun (acc, m) e ->
+              let v, m' = eval m env e in
+              (v :: acc, m'))
+            ([], mem) e_list
+        in
+        let env'', mem'' =
+          List.fold_left2
+            (fun (acc_env, acc_mem) id v ->
+              let l, new_mem = Mem.alloc acc_mem in
+              let final_mem = Mem.store new_mem l v in
+              (Env.bind acc_env id (Addr l), final_mem))
+            (env', mem') id_list (List.rev v_list)
+        in
+        eval mem'' env'' exp
+    | CALLR (f, x_list) ->
+        let id_list, exp, env' =
+          match lookup_env_proc env f with
+          | exception Not_found -> raise (Error "Unbound")
+          | res -> res
+        in
+        if List.length id_list <> List.length x_list then
+          raise (Error "InvalidArg");
+        let l_list = List.map (lookup_env_loc env) x_list in
+        let env'' =
+          List.fold_left2
+            (fun acc_env id l -> Env.bind acc_env id (Addr l))
+            env' id_list l_list
+        in
+        eval mem env'' exp
+    | VAR x -> (
+        match Env.lookup env x with
+        | Addr l -> (Mem.load mem l, mem)
+        | _ -> raise (Error "TypeError: Addr expected"))
+    | ADD (e1, e2) -> (
+        let v1, mem' = eval mem env e1 in
+        let v2, mem'' = eval mem' env e2 in
+        match (v1, v2) with
+        | Num n1, Num n2 -> (Num (n1 + n2), mem'')
+        | _ -> raise (Error "TypeError: not int"))
+    | SUB (e1, e2) -> (
+        let v1, mem' = eval mem env e1 in
+        let v2, mem'' = eval mem' env e2 in
+        match (v1, v2) with
+        | Num n1, Num n2 -> (Num (n1 - n2), mem'')
+        | _ -> raise (Error "TypeError: not int"))
+    | IF (e1, e2, e3) -> (
+        let v, mem' = eval mem env e1 in
+        match v with
+        | Bool true -> eval mem' env e2
+        | Bool false -> eval mem' env e3
+        | _ -> raise (Error "TypeError: boolean expected"))
+    | TRUE -> (Bool true, mem)
+    | FALSE -> (Bool false, mem)
+    | UNIT -> (Unit, mem)
+    | NUM n -> (Num n, mem)
+    | MUL (e1, e2) ->
+        let v1, mem' = eval mem env e1 in
+        let v2, mem'' = eval mem' env e2 in
+        (Num (value_int v1 * value_int v2), mem'')
+    | DIV (e1, e2) ->
+        let v1, mem' = eval mem env e1 in
+        let v2, mem'' = eval mem' env e2 in
+        if value_int v2 = 0 then raise (Error "Division by zero")
+        else (Num (value_int v1 / value_int v2), mem'')
+    | EQUAL (e1, e2) ->
+        let v1, mem' = eval mem env e1 in
+        let v2, mem'' = eval mem' env e2 in
+        (Bool (v1 = v2), mem'')
+    | LESS (e1, e2) ->
+        let v1, mem' = eval mem env e1 in
+        let v2, mem'' = eval mem' env e2 in
+        (Bool (value_int v1 < value_int v2), mem'')
+    | NOT e ->
+        let v, mem' = eval mem env e in
+        (Bool (not (value_bool v)), mem')
+    | SEQ (e1, e2) ->
+        let _, mem' = eval mem env e1 in
+        eval mem' env e2
+    | WHILE (e1, e2) ->
+        let rec loop mem env =
+          let v, mem' = eval mem env e1 in
+          if value_bool v then
+            let _, mem'' = eval mem' env e2 in
+            loop mem'' env
+          else (Unit, mem')
+        in
+        loop mem env
+    | RECORD e_list ->
+        let v_list, mem' =
+          List.fold_left
+            (fun (acc, m) (id, e) ->
+              let v, m' = eval m env e in
+              let l, m'' = Mem.alloc m' in
+              let m''' = Mem.store m'' l v in
+              ((id, l) :: acc, m'''))
+            ([], mem) e_list
+        in
+        let record =
+         fun id ->
+          try List.assoc id (List.rev v_list)
+          with Not_found -> raise (Error "Field not found")
+        in
+        (Record record, mem')
+    | FIELD (e, id) -> (
+        let v, mem' = eval mem env e in
+        match v with
+        | Record r -> (
+            try (Mem.load mem' (r id), mem')
+            with Mem.Not_initialized -> raise (Error "Field not initialized"))
+        | _ -> raise (Error "TypeError : not record"))
+    | ASSIGNF (e1, id, e2) ->
+        let v1, mem' = eval mem env e1 in
+        let v2, mem'' = eval mem' env e2 in
+        let r = value_record v1 in
+        (v2, Mem.store mem'' (r id) v2)
 
   let run (mem, env, pgm) =
     let v, _ = eval mem env pgm in

@@ -2,6 +2,7 @@ let proc leaf (i) = {left := -1, v := i, right := -1} in (* leaf tree *)
 let proc makeLtree (i, t) = {left := t, v := i, right := -1} in (* tree with only left subtree *)
 let proc makeRtree (i, t) = {left := -1, v := i, right := t} in (* tree with only right subtree *)
 let proc makeTree (i, lt, rt) = {left := lt, v := i, right := rt} in (* tree with both subtrees *)
+
 let proc isLeaf (t) =
 if t.left = -1 then
   if t.right = -1 then true else false
@@ -24,6 +25,41 @@ else false in (* see if tree with both subtrees *)
 let proc rTree (t) = t.right in (* right subtree *)
 let proc lTree (t) = t.left in (* left subtree *)
 let proc nodeVal (t) = t.v in (* node value *)
-let proc dft (t) = () in (* print node values in depth-first order *)
-let proc bft (t) = () in (* print node values in breath-first order *)
-(* in 2025 *)
+
+let proc dft (t) =
+    write(t.v);
+    if not (t.left = -1) then dft(t.left) else unit ;
+    if not (t.right = -1) then dft(t.right) else unit in (* print node values in depth-first order *)
+
+let proc isEmpty (q) = 
+    if q.hd = -1 then true else false in
+
+let proc enQ (q, t) =
+    if isEmpty(q) then {hd := t, tl := {hd := -1, tl := {}}}
+    else {hd := q.hd, tl := enQ(q.tl, t)} in
+  
+let proc bfs (q) =
+    if isEmpty(q) then unit
+    else
+      let curr := q.hd in
+      write(curr.v);
+      let nextQ :=
+        if not (curr.left = -1) then
+          if not (curr.right = -1) then
+            let q1 := enQ(q.tl, curr.left) in
+            enQ(q1, curr.right)
+          else
+            enQ(q.tl, curr.left)
+        else
+          if not (curr.right = -1) then
+            enQ(q.tl, curr.right)
+          else
+            q.tl
+      in bfs(nextQ)
+in
+
+let proc bft (t) =
+    let q := {hd := t, tl := {hd := -1, tl := {}}} in
+    bfs(q)
+in (* print node values in breath-first order *)
+2025

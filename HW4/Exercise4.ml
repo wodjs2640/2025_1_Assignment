@@ -20,11 +20,6 @@ let collect_all_items reqs =
   |> List.map (fun (_id, conds) -> List.map collect_gifts conds |> List.flatten)
   |> List.flatten |> List.sort_uniq compare
 
-let create_gift_map gifts =
-  let map = Hashtbl.create (List.length gifts) in
-  List.iteri (fun idx gift -> Hashtbl.add map gift idx) gifts;
-  map
-
 let rec mark_gifts gifts arr gift_map =
   List.iter (fun g -> arr.(Hashtbl.find gift_map g) <- true) gifts
 
@@ -57,14 +52,6 @@ let rec process_cond id_map id conds arr gift_map =
           done)
     conds
 
-let get_marked_gifts arr gift_map =
-  let reverse_map = Hashtbl.create (Array.length arr) in
-  Hashtbl.iter (fun gift idx -> Hashtbl.add reverse_map idx gift) gift_map;
-  arr |> Array.to_list
-  |> List.mapi (fun idx r ->
-         if r then Some (Hashtbl.find reverse_map idx) else None)
-  |> List.filter_map (fun x -> x)
-
 exception No_minimum
 
 let create_dependency_graph reqs =
@@ -89,31 +76,6 @@ let create_dependency_graph reqs =
       List.iter (process_cond id) conds)
     reqs;
   graph
-
-let has_cycle graph =
-  let visited = Hashtbl.create (Hashtbl.length graph) in
-  let rec_detect = Hashtbl.create (Hashtbl.length graph) in
-  let has_cycle = ref false in
-  let rec dfs id =
-    if Hashtbl.mem rec_detect id then has_cycle := true
-    else if not (Hashtbl.mem visited id) then (
-      Hashtbl.add visited id ();
-      Hashtbl.add rec_detect id ();
-      List.iter dfs (Hashtbl.find graph id);
-      Hashtbl.remove rec_detect id)
-  in
-  List.iter dfs (Hashtbl.fold (fun k _ acc -> k :: acc) graph []);
-  !has_cycle
-
-let can_satisfy_with_empty reqs =
-  let rec check_cond cond =
-    match cond with
-    | Items gifts -> gifts = []
-    | Same _ -> true
-    | Common (c1, c2) -> check_cond c1 && check_cond c2
-    | Except (c1, c2) -> true
-  in
-  List.for_all (fun (_, conds) -> List.for_all check_cond conds) reqs
 
 let topological_sort graph reqs =
   let visited = Hashtbl.create (Hashtbl.length graph) in
@@ -156,7 +118,6 @@ let shoppingList reqs =
     else ids
   in
   let id_map = Hashtbl.create (List.length reqs) in
-
   List.iter (fun id -> Hashtbl.add id_map id []) sorted_ids;
 
   let process_id id =

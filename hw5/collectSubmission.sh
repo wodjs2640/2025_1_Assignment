@@ -8,6 +8,7 @@ set -euo pipefail
 # in order of questions
 NOTEBOOKS=(
 	"VAE.ipynb"
+    "GAN.ipynb"
 )
 
 FILES=( "${NOTEBOOKS[@]}" )
@@ -29,6 +30,7 @@ do
 done
 
 echo -e "### Creating PDFs ###"
+echo -e "${NOTEBOOKS[@]}"
 python makepdf.py --notebooks "${NOTEBOOKS[@]}"
 
 echo -e "### Done! Please submit the pdf to ETL. ###"

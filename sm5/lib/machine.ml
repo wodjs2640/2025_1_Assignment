@@ -166,9 +166,56 @@ let malloc_with_gc s m e c k =
     ((!loc_id, 0), m)
   else
     let _ = reachable_locs := [] in
-    (* TODO : Add the code that marks the reachable locations.
-     * let _ = ... 
-     *)
+    let rec mark_env e =
+      match e with
+      | [] -> ()
+      | (_, Loc l) :: e' ->
+          if not (List.mem l !reachable_locs) then (
+            reachable_locs := l :: !reachable_locs;
+            mark_env e')
+          else mark_env e'
+      | (_, Proc (_, _, e')) :: e'' ->
+          mark_env e';
+          mark_env e''
+    in
+    let rec mark_stack s =
+      match s with
+      | [] -> ()
+      | V (L l) :: s' ->
+          if not (List.mem l !reachable_locs) then (
+            reachable_locs := l :: !reachable_locs;
+            mark_stack s')
+          else mark_stack s'
+      | V (R r) :: s' ->
+          List.iter
+            (fun (_, l) ->
+              if not (List.mem l !reachable_locs) then
+                reachable_locs := l :: !reachable_locs)
+            r;
+          mark_stack s'
+      | P (_, _, e) :: s' ->
+          mark_env e;
+          mark_stack s'
+      | M (_, Loc l) :: s' ->
+          if not (List.mem l !reachable_locs) then (
+            reachable_locs := l :: !reachable_locs;
+            mark_stack s')
+          else mark_stack s'
+      | M (_, Proc (_, _, e)) :: s' ->
+          mark_env e;
+          mark_stack s'
+      | _ :: s' -> mark_stack s'
+    in
+    let rec mark_cont k =
+      match k with
+      | [] -> ()
+      | (_, e) :: k' ->
+          mark_env e;
+          mark_cont k'
+    in
+    let _ = mark_stack s in
+    let _ = mark_env e in
+    let _ = mark_cont k in
     let new_m = List.filter (fun (l, _) -> List.mem l !reachable_locs) m in
     if List.length new_m < mem_limit then
       let _ = loc_id := !loc_id + 1 in

@@ -104,12 +104,15 @@ let rec trans : K.program -> Machine.command = function
       @ trans e2
       @ [ Machine.UNBIND; Machine.POP ]
   | K.LETF (f, x, e1, e2) ->
-      [ Machine.PUSH (Machine.Fn (x, trans e1)) ]
-      @ [ Machine.BIND f ]
-      @ [ Machine.PUSH (Machine.Id f) ]
-      @ [ Machine.BIND f ] @ trans e2
-      @ [ Machine.UNBIND; Machine.POP ]
-      @ [ Machine.UNBIND; Machine.POP ]
+      [
+        Machine.PUSH
+          (Machine.Fn (x, trans e1 @ [ Machine.UNBIND; Machine.POP ]));
+        Machine.BIND f;
+        Machine.PUSH (Machine.Id f);
+        Machine.BIND f;
+      ]
+      @ trans e2
+      @ [ Machine.UNBIND; Machine.POP; Machine.UNBIND; Machine.POP ]
   | K.CALLV (f, e) ->
       let result =
         trans e @ [ Machine.MALLOC ] @ [ Machine.BIND "#tmp" ]

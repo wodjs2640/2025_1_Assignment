@@ -25,9 +25,7 @@ class NESAttack(object):
         
         # If loss function is Cross-Entropy loss
         if self.criterion == 'xent':
-            def cross_entropy(logit, label):
-                return torch.nn.functional.cross_entropy(logit, label)
-            self.loss = cross_entropy
+            self.loss = torch.nn.functional.cross_entropy
         # If loss function is Carlini-Wagner loss
         elif self.criterion == 'cw':
             def carlini_wagner(logit, label):
@@ -53,28 +51,23 @@ class NESAttack(object):
         ##########################################################################################################
 
         n, c, h, w = image.shape
-        noise_pos = np.random.normal(size=(self.nes_batch_size, c, h, w))
-        noise = torch.Tensor(np.concatenate([noise_pos, -noise_pos], axis=0)).to(device=self.device)
         
         # YOUR CODE HERE
+        noise_pos = torch.randn(self.nes_batch_size, c, h, w, device=self.device)
+        noise = torch.cat([noise_pos, -noise_pos], dim=0)
+        
         image_batch = image.repeat(2 * self.nes_batch_size, 1, 1, 1) + self.sigma * noise
-        label_batch = label.repeat(2 * self.nes_batch_size)
+        label_batch = label.repeat(2 * self.nes_batch_size).to(device=self.device)
         
         with torch.no_grad():
             logits = self.model(image_batch)
             losses = self.loss(logits, label_batch)
-            del logits
-            torch.cuda.empty_cache()
-        
-        grad_est = torch.zeros_like(image)
+
         if losses.dim() == 0:
             losses = losses.unsqueeze(0).repeat(2 * self.nes_batch_size)
-            
+        
         grad_est = torch.sum(losses.view(-1, 1, 1, 1) * noise, dim=0) / (2 * self.nes_batch_size * self.sigma)
         
-        del losses, noise, image_batch
-        torch.cuda.empty_cache()
-
         return grad_est.detach()
     
     def perturb(self, image, label):
@@ -94,9 +87,7 @@ class NESAttack(object):
         
         for _ in range(self.num_steps):
             grad = self.grad_est(adv_image, label)
-            adv_image = adv_image - self.step_size * torch.sign(grad)
+            adv_image = adv_image + self.step_size * torch.sign(grad)
             adv_image = torch.clamp(adv_image, lower, upper)
-            del grad
-            torch.cuda.empty_cache()
-        
+
         return adv_image

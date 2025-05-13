@@ -7,6 +7,7 @@ open K
 open Machine
 
 (* TODO : complete this function *)
+
 let rec trans : K.program -> Machine.command = function
   | K.NUM i -> [ Machine.PUSH (Machine.Val (Machine.Z i)) ]
   | K.TRUE -> [ Machine.PUSH (Machine.Val (Machine.B true)) ]
@@ -51,10 +52,46 @@ let rec trans : K.program -> Machine.command = function
           Machine.PUSH (Machine.Id ("#for_end_" ^ x));
           Machine.STORE;
         ]
-      @ trans
-          (K.WHILE
-             ( K.LESS (K.VAR x, K.ADD (K.VAR ("#for_end_" ^ x), K.NUM 1)),
-               K.SEQ (e3, K.ASSIGN (x, K.ADD (K.VAR x, K.NUM 1))) ))
+      @ [
+          Machine.PUSH (Machine.Id x);
+          Machine.LOAD;
+          Machine.PUSH (Machine.Id ("#for_end_" ^ x));
+          Machine.LOAD;
+          Machine.PUSH (Machine.Val (Machine.Z 1));
+          Machine.ADD;
+          Machine.LESS;
+          Machine.JTR
+            ( trans e3
+              @ [
+                  Machine.PUSH (Machine.Id x);
+                  Machine.LOAD;
+                  Machine.PUSH (Machine.Val (Machine.Z 1));
+                  Machine.ADD;
+                  Machine.PUSH (Machine.Id x);
+                  Machine.STORE;
+                ]
+              @ [
+                  Machine.PUSH (Machine.Id x);
+                  Machine.LOAD;
+                  Machine.PUSH (Machine.Id ("#for_end_" ^ x));
+                  Machine.LOAD;
+                  Machine.PUSH (Machine.Val (Machine.Z 1));
+                  Machine.ADD;
+                  Machine.LESS;
+                  Machine.JTR
+                    ( trans e3
+                      @ [
+                          Machine.PUSH (Machine.Id x);
+                          Machine.LOAD;
+                          Machine.PUSH (Machine.Val (Machine.Z 1));
+                          Machine.ADD;
+                          Machine.PUSH (Machine.Id x);
+                          Machine.STORE;
+                        ],
+                      [ Machine.PUSH (Machine.Val Machine.Unit) ] );
+                ],
+              [ Machine.PUSH (Machine.Val Machine.Unit) ] );
+        ]
       @ [ Machine.UNBIND; Machine.POP; Machine.UNBIND; Machine.POP ]
   | K.LETV (x, e1, e2) ->
       trans e1
@@ -68,27 +105,38 @@ let rec trans : K.program -> Machine.command = function
       @ [ Machine.UNBIND; Machine.POP ]
   | K.LETF (f, x, e1, e2) ->
       [ Machine.PUSH (Machine.Fn (x, trans e1)) ]
+      @ [ Machine.BIND f ]
+      @ [ Machine.PUSH (Machine.Id f) ]
       @ [ Machine.BIND f ] @ trans e2
       @ [ Machine.UNBIND; Machine.POP ]
+      @ [ Machine.UNBIND; Machine.POP ]
   | K.CALLV (f, e) ->
-      trans e (* [value] *)
-      @ [ Machine.MALLOC ] (* [value; loc] *)
-      @ [ Machine.BIND "#tmp" ] (* [value] *)
-      @ [ Machine.PUSH (Machine.Id "#tmp") ]
-      @ [ Machine.STORE ] (* [] *)
-      @ [ Machine.PUSH (Machine.Id f) ]
-      @ [ Machine.LOAD ] (* [proc] *)
-      @ [ Machine.PUSH (Machine.Id "#tmp") ]
-      @ [ Machine.LOAD ] (* [proc; value] *)
-      @ [ Machine.PUSH (Machine.Id "#tmp") ]
-      @ [ Machine.LOAD ] (* [proc; value; loc] *)
-      @ [ Machine.UNBIND ] @ [ Machine.POP ] @ [ Machine.CALL ]
+      let result =
+        trans e @ [ Machine.MALLOC ] @ [ Machine.BIND "#tmp" ]
+        @ [ Machine.PUSH (Machine.Id "#tmp") ]
+        @ [ Machine.STORE ]
+        @ [ Machine.PUSH (Machine.Id f) ]
+        @ [ Machine.PUSH (Machine.Id "#tmp") ]
+        @ [ Machine.LOAD ]
+        @ [ Machine.PUSH (Machine.Id "#tmp") ]
+        @ [ Machine.CALL ]
+        @ [ Machine.UNBIND; Machine.POP ]
+      in
+      result
   | K.CALLR (f, x) ->
       [
         Machine.PUSH (Machine.Id x);
+        Machine.MALLOC;
+        Machine.BIND "#tmp";
+        Machine.PUSH (Machine.Id "#tmp");
+        Machine.STORE;
         Machine.PUSH (Machine.Id f);
+        Machine.PUSH (Machine.Id "#tmp");
         Machine.LOAD;
+        Machine.PUSH (Machine.Id "#tmp");
         Machine.CALL;
+        Machine.UNBIND;
+        Machine.POP;
       ]
   | K.READ x ->
       [

@@ -135,6 +135,10 @@ let rec trans : K.program -> Machine.command = function
         Machine.LOAD;
         Machine.PUSH (Machine.Id "#tmp");
         Machine.CALL;
+        Machine.PUSH (Machine.Id x);
+        Machine.STORE;
+        Machine.PUSH (Machine.Id x);
+        Machine.LOAD;
         Machine.UNBIND;
         Machine.POP;
       ]

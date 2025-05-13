@@ -34,4 +34,6 @@ let () =
   else if !psm5 then
     print_endline (Machine.command_to_str "" (Translator.trans pgm))
   else if !k then ignore (K.run pgm)
-  else Machine.run (Translator.trans pgm)
+  else (
+    print_endline (Machine.command_to_str "" (Translator.trans pgm));
+    Machine.run (Translator.trans pgm))

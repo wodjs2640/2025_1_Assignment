@@ -26,14 +26,16 @@ class NESAttack(object):
         # If loss function is Cross-Entropy loss
         if self.criterion == 'xent':
             def cross_entropy(logit, label):
-                # TODO: implement Cross-Entropy loss
-                return None
+                return torch.nn.functional.cross_entropy(logit, label)
             self.loss = cross_entropy
         # If loss function is Carlini-Wagner loss
         elif self.criterion == 'cw':
             def carlini_wagner(logit, label):
                 #TODO: implement your Carlini-Wagner loss
-                return None
+                one_hot = torch.zeros_like(logit).scatter_(1, label.unsqueeze(1), 1)
+                other = torch.max(logit * (1 - one_hot), dim=1)[0]
+                real = torch.max(logit * one_hot, dim=1)[0]
+                return torch.clamp(other - real + 50, min=0)
             self.loss = carlini_wagner
         else:
             print('Loss function must be xent or cw')
@@ -50,11 +52,28 @@ class NESAttack(object):
         # grad_est: resulting gradient estimation                                                                #
         ##########################################################################################################
 
-        n, h, w, c = image.shape
-        noise_pos = np.random.normal(size=(self.nes_batch_size, h, w, c))
+        n, c, h, w = image.shape
+        noise_pos = np.random.normal(size=(self.nes_batch_size, c, h, w))
         noise = torch.Tensor(np.concatenate([noise_pos, -noise_pos], axis=0)).to(device=self.device)
         
         # YOUR CODE HERE
+        image_batch = image.repeat(2 * self.nes_batch_size, 1, 1, 1) + self.sigma * noise
+        label_batch = label.repeat(2 * self.nes_batch_size)
+        
+        with torch.no_grad():
+            logits = self.model(image_batch)
+            losses = self.loss(logits, label_batch)
+            del logits
+            torch.cuda.empty_cache()
+        
+        grad_est = torch.zeros_like(image)
+        if losses.dim() == 0:
+            losses = losses.unsqueeze(0).repeat(2 * self.nes_batch_size)
+            
+        grad_est = torch.sum(losses.view(-1, 1, 1, 1) * noise, dim=0) / (2 * self.nes_batch_size * self.sigma)
+        
+        del losses, noise, image_batch
+        torch.cuda.empty_cache()
 
         return grad_est.detach()
     
@@ -67,8 +86,17 @@ class NESAttack(object):
         
         lower = torch.clamp(image - self.epsilon, 0, 255).to(device=self.device)
         upper = torch.clamp(image + self.epsilon, 0, 255).to(device=self.device)
-        adv_image = torch.clone(image).to(device=self.device)
+        adv_image = image.clone().detach().to(device=self.device)
         
         # YOUR CODE HERE
+        adv_image = adv_image + torch.empty_like(adv_image).uniform_(-self.epsilon, self.epsilon)
+        adv_image = torch.clamp(adv_image, 0, 255)
+        
+        for _ in range(self.num_steps):
+            grad = self.grad_est(adv_image, label)
+            adv_image = adv_image - self.step_size * torch.sign(grad)
+            adv_image = torch.clamp(adv_image, lower, upper)
+            del grad
+            torch.cuda.empty_cache()
         
         return adv_image

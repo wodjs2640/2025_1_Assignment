@@ -166,56 +166,9 @@ let malloc_with_gc s m e c k =
     ((!loc_id, 0), m)
   else
     let _ = reachable_locs := [] in
-    let rec mark_env e =
-      match e with
-      | [] -> ()
-      | (_, Loc l) :: e' ->
-          if not (List.mem l !reachable_locs) then (
-            reachable_locs := l :: !reachable_locs;
-            mark_env e')
-          else mark_env e'
-      | (_, Proc (_, _, e')) :: e'' ->
-          mark_env e';
-          mark_env e''
-    in
-    let rec mark_stack s =
-      match s with
-      | [] -> ()
-      | V (L l) :: s' ->
-          if not (List.mem l !reachable_locs) then (
-            reachable_locs := l :: !reachable_locs;
-            mark_stack s')
-          else mark_stack s'
-      | V (R r) :: s' ->
-          List.iter
-            (fun (_, l) ->
-              if not (List.mem l !reachable_locs) then
-                reachable_locs := l :: !reachable_locs)
-            r;
-          mark_stack s'
-      | P (_, _, e) :: s' ->
-          mark_env e;
-          mark_stack s'
-      | M (_, Loc l) :: s' ->
-          if not (List.mem l !reachable_locs) then (
-            reachable_locs := l :: !reachable_locs;
-            mark_stack s')
-          else mark_stack s'
-      | M (_, Proc (_, _, e)) :: s' ->
-          mark_env e;
-          mark_stack s'
-      | _ :: s' -> mark_stack s'
-    in
-    let rec mark_cont k =
-      match k with
-      | [] -> ()
-      | (_, e) :: k' ->
-          mark_env e;
-          mark_cont k'
-    in
-    let _ = mark_stack s in
-    let _ = mark_env e in
-    let _ = mark_cont k in
+    (* TODO : Add the code that marks the reachable locations.
+     * let _ = ... 
+     *)
     let new_m = List.filter (fun (l, _) -> List.mem l !reachable_locs) m in
     if List.length new_m < mem_limit then
       let _ = loc_id := !loc_id + 1 in
@@ -243,19 +196,70 @@ let is_equal v1 v2 =
   | L (base1, z1), L (base2, z2) -> base1 = base2 && z1 = z2
   | _, _ -> false
 
+let rec take n l =
+  match (n, l) with 0, _ | _, [] -> [] | n, x :: xs -> x :: take (n - 1) xs
+
 let step : smeck -> smeck = function
-  | s, m, e, PUSH (Val v) :: c, k -> (V v :: s, m, e, c, k)
+  | s, m, e, PUSH (Val v) :: c, k ->
+      Printf.printf "[STEP] PUSH Val: %s\n" (val_to_str v);
+      flush stdout;
+      Printf.printf "[STEP] Stack: %s\n" (stack_to_str s);
+      flush stdout;
+      Printf.printf "[STEP] Env: %s\n" (env_to_str "" e);
+      flush stdout;
+      (V v :: s, m, e, c, k)
   | s, m, e, PUSH (Id x) :: c, k -> (
+      Printf.printf "[STEP] PUSH Id: %s\n" x;
+      flush stdout;
+      Printf.printf "[STEP] Stack: %s\n" (stack_to_str s);
+      flush stdout;
+      Printf.printf "[STEP] Env: %s\n" (env_to_str "" e);
+      flush stdout;
       match lookup_env x e with
       | Loc l -> (V (L l) :: s, m, e, c, k)
       | Proc p -> (P p :: s, m, e, c, k))
-  | s, m, e, PUSH (Fn (x, c')) :: c, k -> (P (x, c', e) :: s, m, e, c, k)
-  | _ :: s, m, e, POP :: c, k -> (s, m, e, c, k)
-  | V (L l) :: V v :: s, m, e, STORE :: c, k -> (s, store l v m, e, c, k)
-  | V (L l) :: s, m, e, LOAD :: c, k -> (V (load l m) :: s, m, e, c, k)
+  | s, m, e, PUSH (Fn (x, c')) :: c, k ->
+      Printf.printf "[STEP] PUSH Fn: %s\n" x;
+      flush stdout;
+      Printf.printf "[STEP] Stack: %s\n" (stack_to_str s);
+      flush stdout;
+      Printf.printf "[STEP] Env: %s\n" (env_to_str "" e);
+      flush stdout;
+      (P (x, c', e) :: s, m, e, c, k)
+  | _ :: s, m, e, POP :: c, k ->
+      Printf.printf "[STEP] POP (next cmds: %s)\n"
+        (String.concat "; " (List.map (cmd_to_str "") (take 3 c)));
+      flush stdout;
+      Printf.printf "[STEP] Stack: %s\n" (stack_to_str s);
+      flush stdout;
+      Printf.printf "[STEP] Env: %s\n" (env_to_str "" e);
+      flush stdout;
+      (s, m, e, c, k)
+  | V (L l) :: V v :: s, m, e, STORE :: c, k ->
+      Printf.printf "[STEP] STORE: %s <- %s\n" (loc_to_str l) (val_to_str v);
+      flush stdout;
+      Printf.printf "[STEP] Stack: %s\n" (stack_to_str s);
+      flush stdout;
+      Printf.printf "[STEP] Env: %s\n" (env_to_str "" e);
+      flush stdout;
+      (s, store l v m, e, c, k)
+  | V (L l) :: s, m, e, LOAD :: c, k ->
+      Printf.printf "[STEP] LOAD: %s\n" (loc_to_str l);
+      flush stdout;
+      Printf.printf "[STEP] Stack: %s\n" (stack_to_str s);
+      flush stdout;
+      Printf.printf "[STEP] Env: %s\n" (env_to_str "" e);
+      flush stdout;
+      (V (load l m) :: s, m, e, c, k)
   | V (B b) :: s, m, e, JTR (c1, c2) :: c, k ->
       (s, m, e, (if b then c1 @ c else c2 @ c), k)
   | s, m, e, MALLOC :: c, k ->
+      Printf.printf "[STEP] MALLOC\n";
+      flush stdout;
+      Printf.printf "[STEP] Stack: %s\n" (stack_to_str s);
+      flush stdout;
+      Printf.printf "[STEP] Env: %s\n" (env_to_str "" e);
+      flush stdout;
       if !gc_mode then
         let new_l, new_m = malloc_with_gc s m e c k in
         (V (L new_l) :: s, new_m, e, c, k)
@@ -265,11 +269,64 @@ let step : smeck -> smeck = function
       else (box_stack s z [], m, e, c, k)
   | V (R r) :: s, m, e, UNBOX x :: c, k ->
       (V (L (lookup_record x r)) :: s, m, e, c, k)
-  | V (L l) :: s, m, e, BIND x :: c, k -> (s, m, (x, Loc l) :: e, c, k)
-  | P p :: s, m, e, BIND x :: c, k -> (s, m, (x, Proc p) :: e, c, k)
-  | s, m, (x, ev) :: e, UNBIND :: c, k -> (M (x, ev) :: s, m, e, c, k)
+  | s, m, e, BIND x :: c, k -> (
+      Printf.printf "[STEP] BIND: %s\n" x;
+      flush stdout;
+      Printf.printf "[STEP] Stack before BIND: %s\n" (stack_to_str s);
+      flush stdout;
+      Printf.printf "[STEP] Env before BIND: %s\n" (env_to_str "" e);
+      flush stdout;
+      match s with
+      | V (L l) :: s' ->
+          Printf.printf "[STEP] BIND: binding location %s to %s\n"
+            (loc_to_str l) x;
+          flush stdout;
+          (s', m, (x, Loc l) :: e, c, k)
+      | P p :: s' ->
+          Printf.printf "[STEP] BIND: binding procedure to %s\n" x;
+          flush stdout;
+          (s', m, (x, Proc p) :: e, c, k)
+      | _ ->
+          Printf.printf "[STEP] BIND: invalid stack state\n";
+          flush stdout;
+          raise (Error "BIND: invalid stack state"))
+  | s, m, (x, ev) :: e, UNBIND :: c, k ->
+      Printf.printf "[STEP] UNBIND: %s\n" x;
+      flush stdout;
+      Printf.printf "[STEP] Stack: %s\n" (stack_to_str s);
+      flush stdout;
+      Printf.printf "[STEP] Env: %s\n" (env_to_str "" e);
+      flush stdout;
+      (M (x, ev) :: s, m, e, c, k)
   | V (L l) :: V v :: P (x, c', e') :: s, m, e, CALL :: c, k ->
-      (s, store l v m, (x, Loc l) :: e', c', (c, e) :: k)
+      Printf.printf "[STEP] [DEBUG] === CALL 직전 ===\n";
+      flush stdout;
+      Printf.printf "[STEP] Stack: %s\n"
+        (stack_to_str (V (L l) :: V v :: P (x, c', e') :: s));
+      flush stdout;
+      Printf.printf "[STEP] Memory: %s\n" (mem_to_str m);
+      flush stdout;
+      Printf.printf "[STEP] Env: %s\n" (env_to_str "" e);
+      flush stdout;
+      Printf.printf "[STEP] Command: %s\n" (command_to_str "" (CALL :: c));
+      flush stdout;
+      Printf.printf "[STEP] Cont: %s\n" (cont_to_str k);
+      flush stdout;
+      let result = (s, store l v m, (x, Loc l) :: e', c', (c, e) :: k) in
+      let s', m', e', c', k' = result in
+      Printf.printf "[STEP] [DEBUG] === CALL 직후 ===\n";
+      flush stdout;
+      Printf.printf "[STEP] Stack: %s\n" (stack_to_str s');
+      flush stdout;
+      Printf.printf "[STEP] Memory: %s\n" (mem_to_str m');
+      flush stdout;
+      Printf.printf "[STEP] Env: %s\n" (env_to_str "" e');
+      flush stdout;
+      Printf.printf "[STEP] Command: %s\n" (command_to_str "" c');
+      flush stdout;
+      Printf.printf "[STEP] Cont: %s\n" (cont_to_str k');
+      flush stdout;
+      result
   | s, m, _, [], (c, e') :: k -> (s, m, e', c, k)
   | s, m, e, GET :: c, k -> (V (Z (read_int ())) :: s, m, e, c, k)
   | V (Z z) :: s, m, e, PUT :: c, k ->
@@ -295,7 +352,20 @@ let step : smeck -> smeck = function
   | V (Z z2) :: V (Z z1) :: s, m, e, LESS :: c, k ->
       (V (B (z1 < z2)) :: s, m, e, c, k)
   | V (B b) :: s, m, e, NOT :: c, k -> (V (B (not b)) :: s, m, e, c, k)
-  | _ -> raise (Error "Invalid machine state")
+  | s, m, e, c, k ->
+      Printf.eprintf "\n[ERROR] Invalid machine state!\n";
+      flush stderr;
+      Printf.eprintf "Stack: %s\n" (stack_to_str s);
+      flush stderr;
+      Printf.eprintf "Memory: %s\n" (mem_to_str m);
+      flush stderr;
+      Printf.eprintf "Env: %s\n" (env_to_str "" e);
+      flush stderr;
+      Printf.eprintf "Command: %s\n" (command_to_str "" c);
+      flush stderr;
+      Printf.eprintf "Cont: %s\n" (cont_to_str k);
+      flush stderr;
+      raise (Error "Invalid machine state")
 
 let rec run_helper (s, m, e, c, k) =
   match (c, k) with

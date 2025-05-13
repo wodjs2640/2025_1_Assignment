@@ -15,6 +15,7 @@ class PGDAttack(object):
         ##########################################
         
         # YOUR CODE HERE
+        self.fgsm = FGSMAttack(model, step_size, criterion, device)
     
     def perturb(self, image, label):
         ################################################################################################
@@ -27,6 +28,13 @@ class PGDAttack(object):
         adv_image = image.to(device=self.device)
         
         # YOUR CODE HERE
+        adv_image = adv_image + torch.empty_like(adv_image).uniform_(-self.epsilon, self.epsilon)
+        adv_image = torch.clamp(adv_image, 0, 255)
+        
+        for _ in range(self.num_steps):
+            adv_image = self.fgsm.perturb(adv_image, label)
+            delta = torch.clamp(adv_image - image.to(self.device), -self.epsilon, self.epsilon)
+            adv_image = torch.clamp(image.to(self.device) + delta, 0, 255)
         
         return adv_image
 

@@ -25,13 +25,15 @@ class FGSMAttack(object):
         # If loss function is Cross-Entropy loss
         if self.criterion == 'xent':
             # TODO: define Cross-Entropy loss
-            self.loss = None
+            self.loss = torch.nn.CrossEntropyLoss()
 
         # If loss function is Carlini-Wagner loss
         elif self.criterion == 'cw':
             def carlini_wagner(logit, label):
                 #TODO: implement your Carlini-Wagner loss
-                return None
+                correct_logit = logit[torch.arange(logit.size(0)), label]
+                wrong_logit = torch.max(logit - torch.eye(logit.size(1)).to(self.device)[label] * 1e6, dim=1)[0]
+                return -torch.sum(correct_logit - wrong_logit)
             self.loss = carlini_wagner
 
         else:
@@ -50,6 +52,16 @@ class FGSMAttack(object):
         label = label.to(device=self.device)
         
         # YOUR CODE HERE
+        image = image.detach().clone()
+        image.requires_grad = True
+        logits = self.model(image)
+        loss = self.loss(logits, label)
+        
+        self.model.zero_grad()
+        loss.backward()
+        
+        adv_image = image + self.epsilon * torch.sign(image.grad)
+        adv_image = torch.clamp(adv_image, lower, upper)
         
         return adv_image
       

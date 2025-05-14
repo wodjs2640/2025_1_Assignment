@@ -38,56 +38,58 @@ let rec trans : K.program -> Machine.command = function
               [ Machine.PUSH (Machine.Val Machine.Unit) ] );
         ]
   | K.FOR (x, e1, e2, e3) ->
-      let for_condition =
-        [
-          Machine.PUSH (Machine.Id ("#for_" ^ x));
-          Machine.LOAD;
-          Machine.PUSH (Machine.Id ("#for_end_" ^ x));
-          Machine.LOAD;
-          Machine.LESS;
-        ]
-      in
-      let for_body =
-        [
-          Machine.PUSH (Machine.Id "s");
-          Machine.LOAD;
-          Machine.PUSH (Machine.Id ("#for_" ^ x));
-          Machine.LOAD;
-          Machine.ADD;
-          Machine.PUSH (Machine.Id "s");
-          Machine.STORE;
-          Machine.PUSH (Machine.Id "s");
-          Machine.LOAD;
-          Machine.PUT;
-          Machine.PUSH (Machine.Id ("#for_" ^ x));
-          Machine.LOAD;
-          Machine.PUT;
-          Machine.PUSH (Machine.Id ("#for_" ^ x));
-          Machine.LOAD;
-          Machine.PUSH (Machine.Val (Machine.Z 1));
-          Machine.ADD;
-          Machine.PUSH (Machine.Id ("#for_" ^ x));
-          Machine.STORE;
-        ]
-      in
+      let end_label = "#for_end_" ^ x in
       trans e1
       @ [
           Machine.MALLOC;
-          Machine.BIND ("#for_" ^ x);
-          Machine.PUSH (Machine.Id ("#for_" ^ x));
+          Machine.BIND x;
+          Machine.PUSH (Machine.Id x);
           Machine.STORE;
         ]
       @ trans e2
       @ [
           Machine.MALLOC;
-          Machine.BIND ("#for_end_" ^ x);
-          Machine.PUSH (Machine.Id ("#for_end_" ^ x));
+          Machine.BIND end_label;
+          Machine.PUSH (Machine.Id end_label);
           Machine.STORE;
-        ]
-      @ for_condition
-      @ [
+          (* Initialize loop *)
+          Machine.PUSH (Machine.Id x);
+          Machine.LOAD;
+          Machine.PUSH (Machine.Id end_label);
+          Machine.LOAD;
+          Machine.LESS;
           Machine.JTR
-            ( for_body @ for_condition,
+            ( [
+                (* Loop body *)
+                trans e3 @ [ Machine.POP ];
+                (* Clean up e3's result *)
+                (* Increment i *)
+                Machine.PUSH (Machine.Id x);
+                Machine.LOAD;
+                Machine.PUSH (Machine.Val (Machine.Z 1));
+                Machine.ADD;
+                Machine.PUSH (Machine.Id x);
+                Machine.STORE;
+                (* Check condition again *)
+                Machine.PUSH (Machine.Id x);
+                Machine.LOAD;
+                Machine.PUSH (Machine.Id end_label);
+                Machine.LOAD;
+                Machine.LESS;
+                Machine.JTR
+                  ( [
+                      (* Jump back to loop start *)
+                      Machine.PUSH (Machine.Id x);
+                      Machine.LOAD;
+                      Machine.PUSH (Machine.Id end_label);
+                      Machine.LOAD;
+                      Machine.LESS;
+                      Machine.JTR
+                        ( trans (K.FOR (x, K.VAR x, K.VAR end_label, e3)),
+                          [ Machine.PUSH (Machine.Val Machine.Unit) ] );
+                    ],
+                    [ Machine.PUSH (Machine.Val Machine.Unit) ] );
+              ],
               [ Machine.PUSH (Machine.Val Machine.Unit) ] );
         ]
       @ [ Machine.UNBIND; Machine.POP; Machine.UNBIND; Machine.POP ]

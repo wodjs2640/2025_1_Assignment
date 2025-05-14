@@ -43,4 +43,11 @@ let rec subs ((var, var_exp) : string * Lexp.t) : Lexp.t -> Lexp.t = function
 let subst ((sub, exp) : substitution * Lexp.t) : Lexp.t =
   List.fold_left (fun acc sub_ele -> subs sub_ele acc) exp sub
 
-let reduce (exp : Lexp.t) : Lexp.t = raise (Error "not implemented")
+let rec reduce (exp : Lexp.t) : Lexp.t =
+  match exp with
+  | Var x -> Var x
+  | Lam (x, e) -> Lam (x, reduce e)
+  | App (e1, e2) -> (
+      match reduce e1 with
+      | Lam (x, e) -> reduce (subst ([ (x, e2) ], e))
+      | e1' -> App (e1', e2))

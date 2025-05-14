@@ -38,11 +38,43 @@ let rec trans : K.program -> Machine.command = function
               [ Machine.PUSH (Machine.Val Machine.Unit) ] );
         ]
   | K.FOR (x, e1, e2, e3) ->
+      let for_condition =
+        [
+          Machine.PUSH (Machine.Id ("#for_" ^ x));
+          Machine.LOAD;
+          Machine.PUSH (Machine.Id ("#for_end_" ^ x));
+          Machine.LOAD;
+          Machine.LESS;
+        ]
+      in
+      let for_body =
+        [
+          Machine.PUSH (Machine.Id "s");
+          Machine.LOAD;
+          Machine.PUSH (Machine.Id ("#for_" ^ x));
+          Machine.LOAD;
+          Machine.ADD;
+          Machine.PUSH (Machine.Id "s");
+          Machine.STORE;
+          Machine.PUSH (Machine.Id "s");
+          Machine.LOAD;
+          Machine.PUT;
+          Machine.PUSH (Machine.Id ("#for_" ^ x));
+          Machine.LOAD;
+          Machine.PUT;
+          Machine.PUSH (Machine.Id ("#for_" ^ x));
+          Machine.LOAD;
+          Machine.PUSH (Machine.Val (Machine.Z 1));
+          Machine.ADD;
+          Machine.PUSH (Machine.Id ("#for_" ^ x));
+          Machine.STORE;
+        ]
+      in
       trans e1
       @ [
           Machine.MALLOC;
-          Machine.BIND x;
-          Machine.PUSH (Machine.Id x);
+          Machine.BIND ("#for_" ^ x);
+          Machine.PUSH (Machine.Id ("#for_" ^ x));
           Machine.STORE;
         ]
       @ trans e2
@@ -52,44 +84,10 @@ let rec trans : K.program -> Machine.command = function
           Machine.PUSH (Machine.Id ("#for_end_" ^ x));
           Machine.STORE;
         ]
+      @ for_condition
       @ [
-          Machine.PUSH (Machine.Id x);
-          Machine.LOAD;
-          Machine.PUSH (Machine.Id ("#for_end_" ^ x));
-          Machine.LOAD;
-          Machine.PUSH (Machine.Val (Machine.Z 1));
-          Machine.ADD;
-          Machine.LESS;
           Machine.JTR
-            ( trans e3
-              @ [
-                  Machine.PUSH (Machine.Id x);
-                  Machine.LOAD;
-                  Machine.PUSH (Machine.Val (Machine.Z 1));
-                  Machine.ADD;
-                  Machine.PUSH (Machine.Id x);
-                  Machine.STORE;
-                ]
-              @ [
-                  Machine.PUSH (Machine.Id x);
-                  Machine.LOAD;
-                  Machine.PUSH (Machine.Id ("#for_end_" ^ x));
-                  Machine.LOAD;
-                  Machine.PUSH (Machine.Val (Machine.Z 1));
-                  Machine.ADD;
-                  Machine.LESS;
-                  Machine.JTR
-                    ( trans e3
-                      @ [
-                          Machine.PUSH (Machine.Id x);
-                          Machine.LOAD;
-                          Machine.PUSH (Machine.Val (Machine.Z 1));
-                          Machine.ADD;
-                          Machine.PUSH (Machine.Id x);
-                          Machine.STORE;
-                        ],
-                      [ Machine.PUSH (Machine.Val Machine.Unit) ] );
-                ],
+            ( for_body @ for_condition,
               [ Machine.PUSH (Machine.Val Machine.Unit) ] );
         ]
       @ [ Machine.UNBIND; Machine.POP; Machine.UNBIND; Machine.POP ]
@@ -104,12 +102,15 @@ let rec trans : K.program -> Machine.command = function
       @ trans e2
       @ [ Machine.UNBIND; Machine.POP ]
   | K.LETF (f, x, e1, e2) ->
-      [ Machine.PUSH (Machine.Fn (x, trans e1)) ]
-      @ [ Machine.BIND f ]
-      @ [ Machine.PUSH (Machine.Id f) ]
-      @ [ Machine.BIND f ] @ trans e2
-      @ [ Machine.UNBIND; Machine.POP ]
-      @ [ Machine.UNBIND; Machine.POP ]
+      [
+        Machine.PUSH
+          (Machine.Fn (x, trans e1 @ [ Machine.UNBIND; Machine.POP ]));
+        Machine.BIND f;
+        Machine.PUSH (Machine.Id f);
+        Machine.BIND f;
+      ]
+      @ trans e2
+      @ [ Machine.UNBIND; Machine.POP; Machine.UNBIND; Machine.POP ]
   | K.CALLV (f, e) ->
       let result =
         trans e @ [ Machine.MALLOC ] @ [ Machine.BIND "#tmp" ]
@@ -135,6 +136,10 @@ let rec trans : K.program -> Machine.command = function
         Machine.LOAD;
         Machine.PUSH (Machine.Id "#tmp");
         Machine.CALL;
+        Machine.PUSH (Machine.Id x);
+        Machine.STORE;
+        Machine.PUSH (Machine.Id x);
+        Machine.LOAD;
         Machine.UNBIND;
         Machine.POP;
       ]

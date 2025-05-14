@@ -52,44 +52,38 @@ let rec trans : K.program -> Machine.command = function
           Machine.BIND end_label;
           Machine.PUSH (Machine.Id end_label);
           Machine.STORE;
-          (* Initialize loop *)
           Machine.PUSH (Machine.Id x);
           Machine.LOAD;
           Machine.PUSH (Machine.Id end_label);
           Machine.LOAD;
           Machine.LESS;
           Machine.JTR
-            ( [
-                (* Loop body *)
-                trans e3 @ [ Machine.POP ];
-                (* Clean up e3's result *)
-                (* Increment i *)
-                Machine.PUSH (Machine.Id x);
-                Machine.LOAD;
-                Machine.PUSH (Machine.Val (Machine.Z 1));
-                Machine.ADD;
-                Machine.PUSH (Machine.Id x);
-                Machine.STORE;
-                (* Check condition again *)
-                Machine.PUSH (Machine.Id x);
-                Machine.LOAD;
-                Machine.PUSH (Machine.Id end_label);
-                Machine.LOAD;
-                Machine.LESS;
-                Machine.JTR
-                  ( [
-                      (* Jump back to loop start *)
-                      Machine.PUSH (Machine.Id x);
-                      Machine.LOAD;
-                      Machine.PUSH (Machine.Id end_label);
-                      Machine.LOAD;
-                      Machine.LESS;
-                      Machine.JTR
-                        ( trans (K.FOR (x, K.VAR x, K.VAR end_label, e3)),
-                          [ Machine.PUSH (Machine.Val Machine.Unit) ] );
-                    ],
-                    [ Machine.PUSH (Machine.Val Machine.Unit) ] );
-              ],
+            (
+              trans e3
+              @ [
+                  Machine.POP;
+                  Machine.PUSH (Machine.Id x);
+                  Machine.LOAD;
+                  Machine.PUSH (Machine.Val (Machine.Z 1));
+                  Machine.ADD;
+                  Machine.PUSH (Machine.Id x);
+                  Machine.STORE;
+                  Machine.PUSH (Machine.Id x);
+                  Machine.LOAD;
+                  Machine.PUSH (Machine.Id end_label);
+                  Machine.LOAD;
+                  Machine.LESS;
+                  Machine.JTR
+                    (
+                      [
+                        Machine.PUSH (Machine.Id x);
+                        Machine.LOAD;
+                        Machine.PUSH (Machine.Id end_label);
+                        Machine.LOAD;
+                        Machine.LESS;
+                      ],
+                      [ Machine.PUSH (Machine.Val Machine.Unit) ] );
+                ],
               [ Machine.PUSH (Machine.Val Machine.Unit) ] );
         ]
       @ [ Machine.UNBIND; Machine.POP; Machine.UNBIND; Machine.POP ]

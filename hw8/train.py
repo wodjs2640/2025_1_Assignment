@@ -41,7 +41,7 @@ def main():
         train_dataset,
         batch_size=BATCH_SIZE,
         shuffle=True,
-        num_workers=4,
+        num_workers=0,
         drop_last=True,
     )
 
@@ -70,7 +70,7 @@ def main():
 
         samples = sample_image(model, 48, sample_timesteps=1000)
 
-        gen_imgs = make_grid(samples, nrow=8, normalize=True).permute(1, 2, 0).numpy()
+        gen_imgs = make_grid(samples, nrow=8, normalize=True).permute(1, 2, 0).cpu().numpy()
         gen_imgs = (gen_imgs * 255).astype(np.uint8)
         gen_imgs = Image.fromarray(gen_imgs)
         gen_imgs.save(save_dir / f"epoch-{epoch}.png")

@@ -157,7 +157,10 @@ if __name__ == "__main__":
         print(f"Inception Score: {inception_score:.4f}")
 
     gen_imgs = (
-        make_grid(all_samples[:48], nrow=8, normalize=True).permute(1, 2, 0).numpy()
+        make_grid(all_samples[:48], nrow=8, normalize=True)
+        .permute(1, 2, 0)
+        .cpu()
+        .numpy()
     )
     gen_imgs = (gen_imgs * 255).astype(np.uint8)
     gen_imgs = Image.fromarray(gen_imgs)

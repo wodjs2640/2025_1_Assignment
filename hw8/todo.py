@@ -12,7 +12,7 @@ num_timesteps = 1000
 # TODO: implement here
 # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 # Linear schedule for beta
-betas = torch.linspace(beta_1, beta_T, num_timesteps)
+betas = torch.linspace(beta_1, beta_T, num_timesteps).to(device)
 
 # Calculate alphas
 alphas = 1 - betas
@@ -20,8 +20,11 @@ alphas = 1 - betas
 # Calculate alphas_bar (cumulative product of alphas)
 alphas_bar = torch.cumprod(alphas, dim=0)
 
-# Calculate sigmas
-sigmas = torch.sqrt(betas)
+# Calculate sigmas for sampling
+# sigma_t = sqrt((1 - alpha_bar_{t-1}) / (1 - alpha_bar_t) * beta_t)
+sigmas = torch.zeros(num_timesteps).to(device)
+for t in range(1, num_timesteps):
+    sigmas[t] = torch.sqrt((1 - alphas_bar[t - 1]) / (1 - alphas_bar[t]) * betas[t])
 # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
 
@@ -111,8 +114,8 @@ def sample_image(
             if t > 0:
                 # Sample random noise
                 z = torch.randn_like(x_t)
-                # Use beta as variance for simplicity
-                sigma_t = torch.sqrt(beta_t)
+                # Use the proper sigma calculation
+                sigma_t = sigmas[t]
                 x_t = mean + sigma_t * z
             else:
                 x_t = mean

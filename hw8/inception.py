@@ -135,13 +135,26 @@ if __name__ == "__main__":
                 all_samples = torch.cat([all_samples, samples], dim=0)
 
         inception_score = None
-        
+
         # TODO: implement here
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-        pass
+        # Get class probabilities for all samples using the classifier
+        probs = classifier.prob(all_samples)
+
+        # Calculate the marginal distribution p(y) by averaging over all samples
+        marginal_probs = torch.mean(probs, dim=0, keepdim=True)
+
+        # Calculate KL divergence: KL(p(y|x) || p(y))
+        # KL(P||Q) = sum(P * log(P/Q))
+        kl_div = torch.sum(
+            probs * torch.log(probs / (marginal_probs + 1e-8) + 1e-8), dim=1
+        )
+
+        # Inception Score is exp(E[KL(p(y|x) || p(y))])
+        inception_score = torch.exp(torch.mean(kl_div)).item()
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    print(f"Inception Score: {inception_score:.4f}")
+        print(f"Inception Score: {inception_score:.4f}")
 
     gen_imgs = (
         make_grid(all_samples[:48], nrow=8, normalize=True).permute(1, 2, 0).numpy()
